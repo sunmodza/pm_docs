@@ -61,4 +61,4 @@ Future<void> _onStarted(
 
 ---
 
-**Previous**: [BLoC Pattern](../bloc-pattern) | **Next**: [Devices BLoC](./devices-bloc) →
+**Previous**: [BLoC Pattern](./bloc-pattern) | **Next**: [Devices BLoC](./devices-bloc) →
