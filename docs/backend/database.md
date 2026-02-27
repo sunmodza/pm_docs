@@ -6,7 +6,6 @@ Complete database schema and relationships based on GORM models.
 
 ```mermaid
 erDiagram
-    User ||--o{ Log : "creates"
     Room ||--o{ Device : "contains"
     Device ||--o{ Widget : "has"
     Capability ||--o{ Widget : "defines"
@@ -17,23 +16,40 @@ erDiagram
 
 ### users
 
-**Primary Key**: `email` (string, no auto-increment)
+**Note:** The `users` table is used for domain user information, not authentication.
+For authentication, see the `user_accounts` table in the auth package.
 
 ```go
+// internal/core/domain/user.go
 type User struct {
-    Email       string `gorm:"primaryKey;autoIncrement:false"`
-    Name        string
-    Role        string
+    Email string
+    Name  string
+    Role  UserRole
 }
+
+type UserRole string
+
+const (
+    RoleAdmin UserRole = "ADMIN"
+    RoleUser  UserRole = "USER"
+)
 ```
 
 **Fields**:
-- `email` (PK) - User's email address
+- `email` - User's email address
 - `name` - User's full name
-- `role` - User role (admin, user, etc.)
+- `role` - User role (ADMIN, USER)
 
-**Relationships**:
-- Has many Logs (as Actor)
+**Note:** Authentication uses a separate `UserAccount` model:
+
+```go
+// internal/auth/model.go
+type UserAccount struct {
+    ID       uint   `gorm:"primaryKey"`
+    Username string `gorm:"unique"`
+    Password string
+}
+```
 
 ---
 
@@ -42,10 +58,19 @@ type User struct {
 **Primary Key**: `id` (uint, auto-increment)
 
 ```go
+// internal/core/domain/room.go
 type Room struct {
-    ID      uint   `gorm:"primaryKey"`
-    Name    string `gorm:"column:room_name"`
-    Devices []Device `gorm:"foreignKey:RoomID"`
+    ID      uint
+    Name    string
+    Devices []DeviceSummary
+}
+```
+
+```go
+// internal/infrastructure/gorm/room_repo.go
+type Room struct {
+    ID   uint   `gorm:"primaryKey"`
+    Name string `gorm:"column:room_name"`
 }
 ```
 
@@ -63,14 +88,26 @@ type Room struct {
 **Primary Key**: `device_id` (string, no auto-increment)
 
 ```go
+// internal/core/domain/device.go
 type Device struct {
-    DeviceID      string    `gorm:"primaryKey;autoIncrement:false"`
+    DeviceID      string
+    DeviceName    string
+    DeviceType    string
+    LastHeartbeat time.Time
+    Widgets       []Widget
+}
+```
+
+```go
+// internal/infrastructure/gorm/device_repo.go
+type Device struct {
+    DeviceID      string `gorm:"primaryKey;autoIncrement:false"`
     DeviceName    string
     DeviceType    string
     RoomID        *uint
-    Room          *Room     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+    Room          *Room `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
     LastHeartbeat time.Time
-    Widgets       []Widget  `gorm:"foreignKey:DeviceID"`
+    Widgets       []Widget `gorm:"foreignKey:DeviceID"`
 }
 ```
 
@@ -92,6 +129,17 @@ type Device struct {
 **Primary Key**: `id` (uint, auto-increment via gorm.Model)
 
 ```go
+// internal/core/domain/capability.go
+type Capability struct {
+    ID             uint
+    CapabilityType string
+    ControlType    string
+    Widgets        []Widget
+}
+```
+
+```go
+// internal/infrastructure/gorm/capability_repo.go
 type Capability struct {
     gorm.Model
     CapabilityType string
@@ -120,15 +168,30 @@ type Capability struct {
 **Primary Key**: `id` (uint, auto-increment via gorm.Model)
 
 ```go
+// internal/core/domain/widget.go
+type Widget struct {
+    ID           uint
+    WidgetOrder  uint
+    WidgetStatus string
+    Value        string
+    DeviceID     string
+    CapabilityID uint
+    Device       *Device
+    Capability   *Capability
+}
+```
+
+```go
+// internal/infrastructure/gorm/widget_repo.go
 type Widget struct {
     gorm.Model
-    WidgetStatus   string
-    Value          string
-    WidgetOrder    uint       `gorm:"column:widget_order"`
-    CapabilityID   uint       `gorm:"not null"`
-    Capability     Capability `gorm:"foreignKey:CapabilityID;references:ID"`
-    DeviceID       string     `gorm:"not null"`
-    Device         Device     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+    WidgetStatus string
+    Value        string
+    WidgetOrder  uint       `gorm:"column:widget_order"`
+    CapabilityID uint       `gorm:"not null"`
+    Capability   Capability `gorm:"foreignKey:CapabilityID;references:ID"`
+    DeviceID     string     `gorm:"not null"`
+    Device       Device     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 ```
 
@@ -152,12 +215,24 @@ type Widget struct {
 **Primary Key**: `id` (uint, auto-increment via gorm.Model)
 
 ```go
+// internal/core/domain/widget.go
+type Log struct {
+    ID        uint
+    WidgetID  uint
+    Actor     string
+    Value     string
+    EventType string
+    CreatedAt time.Time
+}
+```
+
+```go
+// internal/infrastructure/gorm/recorder_repo.go
 type Log struct {
     gorm.Model
     Value     string
     EventType string
     Actor     string
-    User      User   `gorm:"foreignKey:Actor;references:Email"`
     WidgetID  uint   `gorm:"not null"`
     Widget    Widget `gorm:"foreignKey:WidgetID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
@@ -167,12 +242,12 @@ type Log struct {
 - `id` (PK) - Auto-increment
 - `value` - Log value (as string)
 - `event_type` - Event type
-- `actor` (FK) - User email who created the log
+- `actor` - User email or "sensor" who/what created the log
 - `widget_id` (FK, not null) - Widget reference
 
 **Relationships**:
-- Belongs to User (via Actor → Email)
 - Belongs to Widget (CASCADE on update and delete)
+- Actor field references user email (string), not a foreign key
 
 ---
 
@@ -185,17 +260,17 @@ type Log struct {
 | devices | room_id | rooms.id | CASCADE | SET NULL |
 | widgets | device_id | devices.device_id | CASCADE | CASCADE |
 | widgets | capability_id | capabilities.id | - | - |
-| logs | actor | users.email | - | - |
 | logs | widget_id | widgets.id | CASCADE | CASCADE |
 
 ### Important Notes
 
 1. **Device ID** is a string, not auto-increment
-2. **User Email** is the primary key, not an integer ID
+2. **Authentication** uses separate `UserAccount` table (ID, Username, Password)
 3. **Soft Deletes** enabled via `gorm.Model` (Capabilities, Widgets, Logs)
 4. **NULL Room**: Devices can exist without being assigned to a room
 5. **Cascade Delete**: Deleting a device deletes all its widgets
 6. **Cascade Delete**: Deleting a widget deletes all its logs
+7. **Room has no UserID**: Rooms are not tied to specific users in the current implementation
 
 ---
 

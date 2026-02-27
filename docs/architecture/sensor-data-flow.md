@@ -32,7 +32,7 @@ sequenceDiagram
         end
     end
 
-    loop Every 5 Seconds
+    loop Every 10 Seconds
         FlutterApp->>BackendMQTT: GET /api/rooms/{room_id}/widgets
         BackendMQTT->>BackendDB: SELECT widgets WHERE room_id = {room_id} AND status = 'include'
         BackendDB-->>BackendMQTT: Widget Data
@@ -222,7 +222,7 @@ class DevicesBloc extends Bloc<DevicesEvent, DevicesState> {
   Timer? _fullPollTimer;
 
   Duration _sensorInterval = const Duration(seconds: 1);
-  Duration _fullInterval = const Duration(seconds: 5);
+  Duration _fullInterval = const Duration(seconds: 10);
 
   // Prevent snap-back during user interaction
   final Map<int, String> _pendingValueByWidgetId = {};
@@ -351,7 +351,7 @@ graph LR
 | Type | Interval | Purpose | Data Size |
 |------|----------|---------|-----------|
 | Sensor MQTT | 1 second | Real-time updates | ~200 bytes |
-| Widget Polling | 5 seconds | Full state sync | ~10-50 KB |
+| Widget Polling | 10 seconds | Full state sync | ~10-50 KB |
 | Heartbeat | 1 second | Device health | ~50 bytes |
 
 ### Optimization Techniques

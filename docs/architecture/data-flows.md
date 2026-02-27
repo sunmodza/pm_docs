@@ -13,7 +13,7 @@ The PM IoT System has 12 major data flows connecting all system components.
 ```mermaid
 graph TB
     subgraph "Authentication Flow"
-        A1[Firebase]
+        A1[Username/Password]
         A2[JWT]
     end
 
@@ -55,14 +55,14 @@ graph TB
 
 | Flow | Source | Destination | Protocol | Frequency |
 |------|--------|-------------|----------|-----------|
-| Authentication | User → Firebase → Backend | JWT Token | HTTPS | On login |
+| Authentication | User → Backend | JWT Token | HTTPS | On login |
 | Device Registration | IoT Device | Backend → DB | MQTT | On device start |
 | Sensor Data | IoT Device | Backend → DB | MQTT | 1 second |
 | Commands | User → Backend → IoT Device | Command execution | REST + MQTT | On user action |
-| Widget Updates | Backend | Flutter App | REST Polling | 5 seconds |
+| Widget Updates | Backend | Flutter App | REST Polling | 10 seconds |
 | Widget Visibility | User | Backend → DB | REST | On change |
 | Heartbeat | IoT Device | Backend | MQTT | 1 second |
-| Device Status | Backend | Flutter App | REST Polling | 5 seconds |
+| Device Status | Backend | Flutter App | REST Polling | 10 seconds |
 | Room Management | User | Backend → DB | REST | On user action |
 | API Requests | Flutter App | Backend → DB | REST | As needed |
 | MQTT Messages | Backend | IoT Device | MQTT | As needed |
@@ -87,7 +87,7 @@ graph TB
 ### Polling Flows
 
 **Widget State Polling**:
-- **Frequency**: 5 seconds
+- **Frequency**: 10 seconds
 - **Protocol**: REST
 - **Data Size**: ~10-50KB
 - **Optimization**: Pending value tracking
@@ -96,9 +96,8 @@ graph TB
 
 **Initial Auth**:
 - **Frequency**: Once per session
-- **Protocol**: OAuth 2.0 + JWT
-- **Token Lifetime**: 24 hours
-- **Refresh**: 7 days
+- **Protocol**: Username/Password + JWT
+- **Token Lifetime**: 72 hours
 
 ## 🔗 Flow Interdependencies
 
@@ -119,7 +118,7 @@ graph LR
 
 Detailed documentation for each flow:
 
-1. **[Authentication Flow](./auth-flow)** - Firebase + JWT integration
+1. **[Authentication Flow](./auth-flow)** - Username/Password + JWT integration
 2. **[Device Registration Flow](./device-registration-flow)** - MQTT auto-discovery
 3. **[Sensor Data Flow](./sensor-data-flow)** - Real-time data streaming
 4. **[Command Flow](./command-flow)** - User commands to devices
@@ -181,7 +180,7 @@ graph TB
 
 ### Caching Strategy
 
-- **Widget State**: 5-second cache
+- **Widget State**: 10-second cache
 - **User Sessions**: JWT tokens
 - **Database Queries**: Connection pooling
 - **API Responses**: Conditional requests
